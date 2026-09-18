@@ -1,93 +1,99 @@
 # Guardian Battery ECM Project
 
-Individual Simulink project (Model-Based Design — Module 3): a 2RC Thevenin equivalent-circuit model (ECM) plus State-of-Charge (SOC) estimation for a real, commercially available LFP cell.
+[![MATLAB](https://img.shields.io/badge/MATLAB-R2021b%2B-orange?logo=mathworks)](https://www.mathworks.com/)
+[![Simulink](https://img.shields.io/badge/Simulink-Required-blue)](https://www.mathworks.com/products/simulink.html)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+A 2RC Thevenin equivalent-circuit model (ECM) and State-of-Charge (SOC) estimation stack for a real, commercially available LFP cell, built in **MATLAB** and **Simulink**.
 
 **Reference cell:** EVE Energy LF50K, 3.2 V nominal / 50 Ah, prismatic LiFePO4.
 
-Scope is pure signal/estimation logic — no thermal model, no closed-loop control, no PID.
+---
 
-## Architecture
+## 📋 Project Objectives
 
-```
-Current Input I(t) [CSV]
-        │
-        ▼
-OCV(SOC) Lookup + Hysteresis Noise ──► Terminal Voltage V(t) [Output]
-        │                                       ▲
-        ▼                                       │
-R0 – R1C1 (– R2C2) Thevenin Branch ──────────────┘
-        │
-        ▼  (shared I(t), V(t) feed)
-┌───────────────┬───────────────────┬──────────────────────┐
-│ Coulomb        │ EKF SOC Estimator │ TLS R0 Identifier /  │
-│ Counting (core)│ (Bonus 2)         │ SOH Check (Bonus 3)  │
-└───────────────┴───────────────────┴──────────────────────┘
-        │
-        ▼
-Logged outputs (To Workspace): Terminal_Voltage_log, SOC_CC_log, ...
-```
+* **Thevenin ECM:** Models terminal voltage from an OCV(SOC) lookup with bounded hysteresis noise, a series resistance R0, and an R1‑C1 polarization branch (core), extendable to a full 2RC branch (Bonus 1).
+* **Coulomb Counting SOC:** Integrates measured current over time to estimate SOC, with clamping and out‑of‑window flagging against the 10–90% operating band.
+* **EKF SOC Estimation:** Fuses the Coulomb Counting model with terminal-voltage measurements via an Extended Kalman Filter (Bonus 2) for a more robust SOC/V1 estimate.
+* **Signal Logging & Diagnostics:** Logs terminal voltage and SOC estimates to the base workspace as `Structure With Time`, visualized via a dedicated results script.
 
-Current sign convention: **positive during discharge, negative during charge/regen** — used consistently throughout the model, dataset, and equations.
+---
 
-## Deliverable tiers
+## 🗂️ Repository Structure
 
-| Tier | Content | Status |
-|---|---|---|
-| Core (required) | 1RC Thevenin ECM, OCV lookup + hysteresis noise, Coulomb Counting SOC, logging/plotting | ✅ Implemented |
-| Bonus 1 | Full 2RC Thevenin ECM (R2, C2 branch) | ✅ Implemented |
-| Bonus 2 | EKF SOC estimator (provided `EKF_SOC_Estimator.m`, unmodified) | ✅ Implemented |
-| Bonus 3 | TLS-based R0 identification + SOH ratio check | ⬜ Not yet attempted |
-
-## Repository structure
-
-```
-├── Guardian_Top.slx                        # Top-level Simulink model
-├── init_workspace.m                        # Loads parameters, CSVs, builds timeseries
-├── Guardian_Battery_DriveCycle_Current.csv # Shared current profile, 3600 pts @ 1 Hz
-├── Guardian_Battery_OCV_SOC_Table.csv      # OCV-SOC lookup table
-├── EKF_SOC_Estimator.m                     # Provided EKF implementation (Bonus 2)
-└── report/                                 # Project report (spec + results write-up)
+```text
+├── Base.m                  # Initialization script — loads cell/ECM parameters, current & OCV-SOC data
+├── Main.slx                # Top-level Simulink model (ECM + SOC estimators)
+├── Plot_Results.m          # Post-simulation plotting of logged workspace signals
+├── EKF_SOC_Estimator.m     # Provided EKF SOC estimator (Bonus 2, unmodified filter structure)
+├── LICENSE                 # MIT License
+├── README.md               # Project documentation
+└── docs/
+    ├── Guardian_Battery_ECM_Report.pdf   # Full project report
+    └── sample_output.png                  # Simulation output figure
 ```
 
-## Getting started
+---
 
-1. Clone the repo and keep all files in one working folder (paths in the init script are relative).
-2. Open MATLAB with Simulink installed.
-3. Run `init_workspace.m` to load `Q_nominal`, `SOC_0`, the R/C parameters, the drive-cycle `timeseries`, and the OCV-SOC table into the base workspace.
-4. Open `Guardian_Top.slx`.
+## ⚙️ Prerequisites
+
+* MATLAB R2021b or later *(update to match what you actually developed on)*
+* Simulink
+* No additional toolboxes required beyond base MATLAB/Simulink
+
+---
+
+## 🚀 How to Run
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/M0h7amed/Guardian-Battery-ECM-Modeling-.git
+   ```
+2. Open MATLAB and set your current working directory to this repository folder.
+3. Run the initialization script in your Command Window:
+   ```matlab
+   Base.m
+   ```
+   This loads `Q_nominal`, `SOC_0`, the R0/R1/C1 (and R2/C2) parameters, the drive-cycle current as a `timeseries`, and the OCV‑SOC lookup table into the base workspace.
+4. Open `Main.slx`.
 5. Confirm solver settings: **Fixed-step, discrete (no continuous states), Ts = 1 s**.
 6. Run the simulation.
-7. Logged signals land in the base workspace as `Structure With Time`; use the provided plotting script/App Designer app to visualize results.
+7. Run `Plot_Results.m` to generate the terminal voltage, Coulomb Counting SOC, and EKF SOC diagnostic plots from the logged workspace variables.
 
-## Model parameters
+---
 
-| Parameter | Value | Notes |
-|---|---|---|
-| Q_nominal | 50 Ah | Datasheet |
-| SOC(0) | 80 % | Fixed initial condition for the shared test |
-| SOC operating window | 10–90 % | Clamp/flag boundary |
-| R0 | 0.70 mΩ | Datasheet AC impedance |
-| R1 / C1 | 1.60 mΩ / 17,000 F | Scaled from HPPC reference data |
-| R2 / C2 (Bonus 1) | 0.35 mΩ / 5,200 F | Scaled from HPPC reference data |
-| Ts | 1 s | Matches current dataset's native rate |
-| Hysteresis noise | power 1e-4, seed 23341, filter [0.02]/[1 -0.98], sat ±0.005 V | Identical for every student |
+## 🛠️ System Architecture Highlights
 
-## Logged outputs
+* **OCV/Hysteresis Chain:** 1‑D lookup table for OCV(SOC), summed with a band-limited, low-pass-filtered, saturated noise term to emulate voltage hysteresis.
+* **Thevenin Branch:** R0 in series with an R1‑C1 polarization branch (core), extendable to a second R2‑C2 branch (Bonus 1) for a closer voltage fit.
+* **SOC Estimation:** Open-loop Coulomb Counting (core) alongside a closed-loop EKF (Bonus 2) that corrects drift using the measured terminal voltage.
 
-| Variable | Type | Units | Tier |
-|---|---|---|---|
-| `Terminal_Voltage_log` | double | V | Core |
-| `SOC_CC_log` | double | % | Core |
-| `SOC_EKF_log` | double | % | Bonus 2 |
-| `R0_TLS_estimate` | double | Ω | Bonus 3 |
-| `SOH_ratio` | double | % | Bonus 3 |
+---
 
-## Notes / assumptions
+## 📑 Full Project Report
 
-- Fixed ambient temperature of 25 °C throughout — no thermal sub-model.
-- Every student uses an identical current profile, OCV table, R/C values, and noise seed, so `Terminal_Voltage_log` should match the instructor reference trace within ±15 mV RMS.
-- Because Coulomb Counting is open-loop in this simulation environment, `SOC_CC_log` tracks near-exactly with the "true" SOC — this is expected here, not proof of correctness on its own (real current-sensor bias is the motivation for the EKF in Bonus 2).
+A detailed write-up covering the signal-flow architecture, governing equations, sign convention, hysteresis noise design, Coulomb Counting vs. EKF SOC estimation, and results/validation against the reference trace is available here:
 
-## Author
+📄 [Guardian Battery ECM — Full Technical Report (PDF)](docs/Guardian_Battery_ECM_Report.pdf)
 
-Mohamed Nabil Ali — Mechatronics and Robotics Engineering, Ain Shams University
+---
+
+## 📸 Sample Output
+
+The figure below is generated by `Plot_Results.m`: terminal voltage (top) and SOC estimates — Coulomb Counting vs. EKF — (bottom) over the drive-cycle simulation window.
+
+![Simulation Output](docs/sample_output.png)
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 👤 Author
+
+**Mohamed Nabil Ali Abd Elaziz Soliman**
+Mechatronics and Robotics Engineering Program, Ain Shams University
+[GitHub: @M0h7amed](https://github.com/M0h7amed)
